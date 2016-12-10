@@ -5,18 +5,18 @@ import reduce from 'lodash/reduce';
  */
 
 function stringifiedArray(array) {
-  return array.map((item) => item && item.toString())
+  return array.map(item => item && item.toString());
 }
 
 /**
  * To avoid including immutable-js as a dependency, check if an object is
  * immutable by checking if it implements the getIn method.
  *
- * @param  {any} object
- * @return {bool}
+ * @param  {Any} object
+ * @return {Boolean}
  */
 export function isImmutable(object) {
-  return object && !!object.getIn
+  return object && !!object.getIn;
 }
 
 /**
@@ -25,18 +25,18 @@ export function isImmutable(object) {
  *
  * @param  {Object, Immutable.Map, Immutable.Record} object
  * @param  {Array<string, number>} keyPath
- * @return {any}
+ * @return {Any}
  */
-export function getIn (object, keyPath) {
+export function getIn(object, keyPath) {
   if (object.getIn) {
-    return object.getIn(stringifiedArray(keyPath))
+    return object.getIn(stringifiedArray(keyPath));
   }
 
   return reduce(
     keyPath,
     (memo, key) => memo[key],
-    object
-  )
+    object,
+  );
 }
 
 /**
@@ -45,18 +45,34 @@ export function getIn (object, keyPath) {
  *
  * @param  {Object, Immutable.Map, Immutable.Record} object
  * @param  {Array<string, number>} keyPath
- * @param  {any} value
- * @return {any}
+ * @param  {Any} value
+ * @return {Any}
  */
-export function setIn (object, keyPath, value) {
+export function setIn(object, keyPath, value) {
   if (object.setIn) {
-    return object.setIn(stringifiedArray(keyPath), value)
+    return object.setIn(stringifiedArray(keyPath), value);
   }
 
-  const lastKey = keyPath.pop()
-  const location = getIn(object, keyPath)
+  const lastKey = keyPath.pop();
+  const location = getIn(object, keyPath);
 
-  location[lastKey] = value
+  location[lastKey] = value;
 
-  return object
+  return object;
+}
+
+/**
+ * Moves the union to a property with the appropriate schema name.
+ *
+ * @param  {Object, Immutable.Map, Immutable.Record} object
+ * @return {Any}
+ */
+export function moveUnionToSchema(entity) {
+  if (isImmutable(entity)) {
+    return {
+      [entity.get('schema')]: entity.get('id'),
+    };
+  }
+
+  return Object.assign({}, entity, { [entity.schema]: entity.id });
 }

@@ -4,7 +4,7 @@ import UnionSchema from 'normalizr/lib/UnionSchema';
 import assign from 'lodash/assign';
 import merge from 'lodash/merge';
 import isObject from 'lodash/isObject';
-import { isImmutable, getIn, setIn } from './ImmutableUtils'
+import { isImmutable, getIn, setIn, moveUnionToSchema } from './ImmutableUtils';
 
 /**
  * Take either an entity or id and derive the other.
@@ -18,17 +18,17 @@ import { isImmutable, getIn, setIn } from './ImmutableUtils'
 function resolveEntityOrId(entityOrId, entities, schema) {
   const key = schema.getKey();
 
-  let entity = entityOrId
-  let id = entityOrId
+  let entity = entityOrId;
+  let id = entityOrId;
 
   if (isObject(entityOrId)) {
-    id = getIn(entity, [schema.getIdAttribute()])
-    entity = getIn(entities, [key, id])
+    id = getIn(entity, [schema.getIdAttribute()]);
+    entity = getIn(entities, [key, id]);
   } else {
-    entity = getIn(entities, [key, id])
+    entity = getIn(entities, [key, id]);
   }
 
-  return { entity, id }
+  return { entity, id };
 }
 
 
@@ -43,27 +43,38 @@ function resolveEntityOrId(entityOrId, entities, schema) {
  */
 function denormalizeIterable(items, entities, schema, bag) {
   const itemSchema = schema.getItemSchema();
+  const isMappable = typeof items.map === 'function';
 
-  return items.map(o => denormalize(o, entities, itemSchema, bag));
+  // Handle arrayOf iterables
+  if (isMappable) {
+    return items.map(o => denormalize(o, entities, itemSchema, bag));
+  }
+
+  // Handle valuesOf iterables
+  const denormalized = {};
+  Object.keys(items).forEach((key) => {
+    denormalized[key] = denormalize(items[key], entities, itemSchema, bag);
+  });
+  return denormalized;
 }
 /*
- * Same as denormalizeIterable() but returns `items` if nothing changed
+ * Memoized version of `denormalizeIterable`.
  */
 function denormalizeIterableMemoized(items, entities, schema, bag) {
   const itemSchema = schema.getItemSchema();
-  
-  let isDifferent = false
+
+  let isDifferent = false;
   const newItems = items.map((o, i) => {
-    let newItem = denormalizeMemoized(o, entities, itemSchema, bag)
+    const newItem = denormalizeMemoized(o, entities, itemSchema, bag);
 
     if (newItem !== items[i]) {
-      isDifferent = true
+      isDifferent = true;
     }
 
-    return newItem
+    return newItem;
   });
 
-  return isDifferent ? newItems : items
+  return isDifferent ? newItems : items;
 }
 
 /**
@@ -73,39 +84,34 @@ function denormalizeIterableMemoized(items, entities, schema, bag) {
  * @param   {object} bag
  * @returns {object|Immutable.Map}
  */
-function denormalizeUnion(entity, entities, unionSchema, bag) {
-  if (!entity.schema)
-    throw new Error('Expect `entity` to have a schema key as a result from normalizing an union.')
-
-  const itemSchema = unionSchema.getItemSchema()[entity.schema]
-
-  const id = getIn(entity, [itemSchema.getIdAttribute()])
-  const trueEntity = getIn(entities, [itemSchema.getKey(), id])
-
-  return denormalize(
-    trueEntity,
+function denormalizeUnion(entity, entities, schema, bag) {
+  const itemSchema = schema.getItemSchema();
+  const denormalized = denormalize(
+    moveUnionToSchema(entity),
     entities,
     itemSchema,
-    bag
+    bag,
   );
+  return getIn(denormalized, [isImmutable(entity) ? entity.get('schema') : entity.schema]);
 }
 /*
- * Same as denormalizeUnion for now
+ * Memoized version of `denormalizeUnion`.
  */
 function denormalizeUnionMemoized(entity, entities, unionSchema, bag) {
-  if (!entity.schema)
-    throw new Error('Expect `entity` to have a schema key as a result from normalizing an union.')
+  if (!entity.schema) {
+    throw new Error('Expect `entity` to have a schema key as a result from normalizing an union.');
+  }
 
-  const itemSchema = unionSchema.getItemSchema()[entity.schema]
+  const itemSchema = unionSchema.getItemSchema()[entity.schema];
 
-  const id = getIn(entity, [itemSchema.getIdAttribute()])
-  const trueEntity = getIn(entities, [itemSchema.getKey(), id])
+  const id = getIn(entity, [itemSchema.getIdAttribute()]);
+  const trueEntity = getIn(entities, [itemSchema.getKey(), id]);
 
   return denormalizeMemoized(
     trueEntity,
     entities,
     itemSchema,
-    bag
+    bag,
   );
 }
 
@@ -123,13 +129,12 @@ function denormalizeUnionMemoized(entity, entities, unionSchema, bag) {
  * @returns {object|Immutable.Map}
  */
 function denormalizeObject(obj, entities, schema, bag) {
-  let denormalized = obj
+  let denormalized = obj;
 
   Object.keys(schema)
     .filter(attribute => attribute.substring(0, 1) !== '_')
     .filter(attribute => typeof getIn(obj, [attribute]) !== 'undefined')
-    .forEach(attribute => {
-
+    .forEach((attribute) => {
       const item = getIn(obj, [attribute]);
       const itemSchema = getIn(schema, [attribute]);
 
@@ -151,15 +156,15 @@ function denormalizeObject(obj, entities, schema, bag) {
  */
 function denormalizeEntity(entityOrId, entities, schema, bag) {
   const key = schema.getKey();
-  const { entity, id } = resolveEntityOrId(entityOrId, entities, schema)
+  const { entity, id } = resolveEntityOrId(entityOrId, entities, schema);
 
-  if(!bag.hasOwnProperty(key)) {
+  if (!bag.hasOwnProperty(key)) {
     bag[key] = {};
   }
 
-  if(!bag[key].hasOwnProperty(id)) {
+  if (!bag[key].hasOwnProperty(id)) {
     // Ensure we don't mutate it non-immutable objects
-    const obj = isImmutable(entity) ? entity : merge({}, entity)
+    const obj = isImmutable(entity) ? entity : merge({}, entity);
 
     // Need to set this first so that if it is referenced within the call to
     // denormalizeObject, it will already exist.
@@ -171,42 +176,42 @@ function denormalizeEntity(entityOrId, entities, schema, bag) {
 }
 
 /**
- * Same as denormalizeEntity right above, but memoized
- * /!\ Does not handle circular dependencies
+ * Memoized version of `denormalizeEntity`.
  */
-// TODO: Pass cache as parameter to enable differents caches for different entity sets with entity names that may collide (e.g. 2 entity sets each with a "Post" entity)
-export let cache = {}
+export const cache = {};
 
 function denormalizeEntityMemoized(entityOrId, entities, schema, bag) {
   const key = schema.getKey();
-  const { entity, id } = resolveEntityOrId(entityOrId, entities, schema)
+  const { entity, id } = resolveEntityOrId(entityOrId, entities, schema);
 
-  if (!entity)
-    return null
-  
+  if (!entity) {
+    return null;
+  }
+
   /* Cache */
-  if (!cache[key])
-    cache[key] = {}
+  if (!cache[key]) {
+    cache[key] = {};
+  }
   if (!cache[key][id]) {
     cache[key][id] = {
       entity,
       denormalized: entity,
-    }
+    };
   }
   /* Cache *****/
 
-  if(!bag.hasOwnProperty(`${key}:${id}`)) {
-    bag[`${key}:${id}`] = true
+  if (!bag.hasOwnProperty(`${key}:${id}`)) {
+    bag[`${key}:${id}`] = true;
 
     /* If cache entity is different, wipe cache */
     if (cache[key][id].entity !== entity) {
-      cache[key][id].entity = entity
-      cache[key][id].denormalized = entity
+      cache[key][id].entity = entity;
+      cache[key][id].denormalized = entity;
     }
 
     /* Start with the cache as reference */
-    let referenceObject = cache[key][id].denormalized
-    let relationsToUpdate = {}
+    const referenceObject = cache[key][id].denormalized;
+    const relationsToUpdate = {};
 
     /* For each relation in EntitySchema */
     Object.keys(schema)
@@ -214,33 +219,32 @@ function denormalizeEntityMemoized(entityOrId, entities, schema, bag) {
       .filter(attribute => attribute.substring(0, 1) !== '_')
       /* Filter out relations not present */
       .filter(attribute => typeof getIn(referenceObject, [attribute]) !== 'undefined')
-      .forEach(relation => {
+      .forEach((relation) => {
         const item = getIn(referenceObject, [relation]);
         const itemSchema = getIn(schema, [relation]);
 
-        const denormalizedItem = denormalizeMemoized(item, entities, itemSchema, bag)
-        
+        const denormalizedItem = denormalizeMemoized(item, entities, itemSchema, bag);
+
         if (denormalizedItem !== item) {
           relationsToUpdate[relation] = denormalizedItem;
         }
-
       });
 
     /* If there is any relations to update, we send a new object */
-    let returnObject = referenceObject
+    let returnObject = referenceObject;
     if (Object.keys(relationsToUpdate).length > 0) {
-      returnObject = assign({}, returnObject, relationsToUpdate)
+      returnObject = assign({}, returnObject, relationsToUpdate);
     }
 
     /* We update the cache */
-    cache[key][id].denormalized = returnObject
+    cache[key][id].denormalized = returnObject;
 
-    delete bag[`${key}:${id}`]
+    delete bag[`${key}:${id}`];
 
-    return returnObject
-  } else {
-    return id
+    return returnObject;
   }
+
+  return id;
 }
 
 /**
@@ -268,15 +272,30 @@ function denormalize(obj, entities, schema, bag = {}) {
     return denormalizeIterable(obj, entities, schema, bag);
   } else if (schema instanceof UnionSchema) {
     return denormalizeUnion(obj, entities, schema, bag);
-  } else {
-    // Ensure we don't mutate it non-immutable objects
-    const entity = isImmutable(obj) ? obj : merge({}, obj)
-    return denormalizeObject(entity, entities, schema, bag);
   }
+  // Ensure we don't mutate it non-immutable objects
+  const entity = isImmutable(obj) ? obj : merge({}, obj);
+  return denormalizeObject(entity, entities, schema, bag);
 }
 
 /**
- * Same as denormalize right above, but memoized
+ * Memoized version of `denormalize`.
+ *
+ * `denormalizeMemoized` will return values of previous denormalizations
+ * if nothing changed in the concerned entities.
+ *
+ * The key goal is to be able to provide a quick way to determine
+ * if an entity or its relations changed by using a shallow equality.
+ * This is a performance optimization.
+ *
+ * For example, this would be used on Connected Components in a Redux App.
+ * Connected Components use shallow comparison on their props to know if they
+ * need to be re-renderer or not.
+ *
+ * Without memoization, Components will trigger a re-render everytime
+ * the store changes ; because `denormalize` returns a new object everytime.
+ * With memoization, a new object will be returned only if the underlying entity
+ * and/or its underlying relations have changed.
  */
 function denormalizeMemoized(obj, entities, schema, bag = {}) {
   if (obj === null || typeof obj === 'undefined' || !isObject(schema)) {
@@ -290,16 +309,15 @@ function denormalizeMemoized(obj, entities, schema, bag = {}) {
   } else if (schema instanceof UnionSchema) {
     return denormalizeUnionMemoized(obj, entities, schema, bag);
   }
+
+  return obj;
 }
 
-/**
- * Exposed function
- */
-// eslint-disable-next-line no-undef
+// eslint-disable-next-line no-undef,func-names
 module.exports.denormalize = function (obj, entities, schema, options = {}) {
   if (options.memoized) {
     return denormalizeMemoized(obj, entities, schema, {});
-  } else {
-    return denormalize(obj, entities, schema, {});
   }
-}
+
+  return denormalize(obj, entities, schema, {});
+};

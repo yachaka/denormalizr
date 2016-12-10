@@ -1,3 +1,23 @@
+### [v0.4.1](https://github.com/gpbl/denormalizr/tree/v0.4.1) (2016-11-27)
+
+* Move `normalizr` to dependencies from peer dependencies ([\#32](https://github.com/gpbl/denormalizr/pull/32))
+
+### [v0.4.0](https://github.com/gpbl/denormalizr/tree/v0.4.0) (2016-11-09)
+
+* Add support for `valuesOf` ([\#31](https://github.com/gpbl/denormalizr/pull/31)) - by [@pierscowburn](https://github.com/pierscowburn)
+
+### [v0.3.5](https://github.com/gpbl/denormalizr/tree/v0.3.5) (2016-10-27)
+
+* Accept wider range of lodash versions ([\#29](https://github.com/gpbl/denormalizr/pull/29)) - by [@just-boris](https://github.com/just-boris)
+
+### [v0.3.4](https://github.com/gpbl/denormalizr/tree/v0.3.4) (2016-10-09)
+
+* Update package.json to include only relevant files when installing via npm
+
+### [v0.3.3](https://github.com/gpbl/denormalizr/tree/v0.3.3) (2016-10-08)
+
+* Fix an issue with `unionOf` when using Immutable objects ([\#23](https://github.com/gpbl/denormalizr/pull/23)) - by [@DEfusion](https://github.com/DEfusion)
+
 ### [v0.3.2](https://github.com/gpbl/denormalizr/tree/v0.3.2) (2016-08-06)
 
 * Accept lodash `v4` minor releases
