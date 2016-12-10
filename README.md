@@ -19,7 +19,7 @@ npm install denormalizr --save
 
 ```js
 import { denormalize } from "denormalizr";
-const denormalized = denormalize(entity, entities, entitySchema, { memoized: false });
+const denormalized = denormalize(entity, entities, entitySchema, { memoized: false | true });
 ```
 
 ### Documentation 
@@ -37,7 +37,7 @@ const denormalized = denormalize(entity, entities, entitySchema, { memoized: fal
 ## API
 
 ```
-denormalize (entity, entities, schema, options: { memoized: bool}) -> Object|Array|Immutable.Map|Immutable.List
+denormalize (entity, entities, schema, options: { memoized: bool }) -> Object|Array|Immutable.Map|Immutable.List
 ```
 
 ### Params 
@@ -166,13 +166,13 @@ If you set the `memoized` option to `true`, the `articles` array will also be th
 
 ```js
 const articles1 = denormalize(entitiesId, normalized.entities, articleList, { memoized: true });
-
 const articles2 = denormalize(entitiesId, normalized.entities, articleList, { memoized: true });
 
 console.log(articles1 === articles2); // true
 
-// We change related author entity
-// Note: Shallow comparison is used for memoization, so be sure to always return a new object. Treat entities as immutable data.
+// Let's change related author entity
+// Note: Shallow comparison is used for memoization, so be sure to always return a new object.
+// Treat entities as immutable data.
 normalized.entities.authors['1'] = {
   id: '1',
   name: 'John',
@@ -194,7 +194,7 @@ parameter) has references to one or more entities.
 > const articles1 = denormalize([1, 2], normalized.entities, articleList, { memoized: true });
 > const articles2 = denormalize([1, 2], normalized.entities, articleList, { memoized: true });
 > 
-> console.log(articles1 === articles2); // false, because supplied arrays are different
+> console.log(articles1 === articles2); // false, because supplied arrays are different instances
 >
 > // RIGHT ✓
 > const entitiesId = [1, 2];
